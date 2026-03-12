@@ -59,11 +59,15 @@ with st.sidebar:
     
     # API ключ Gemini
     api_key = st.text_input(
-        "API ключ Google Gemini",
-        value="AIzaSyAY0AFJlssDEOZyqe6bwxNPvUc8W5bnZBU",
+        "API ключ Google Gemini *",
         type="password",
-        help="Получите ключ в Google AI Studio"
+        help="Получите ключ в Google AI Studio (https://aistudio.google.com/app/apikey). Ключ не сохраняется и используется только для текущей сессии."
     )
+    
+    if api_key:
+        st.success("✅ API ключ принят")
+    else:
+        st.warning("⚠️ Введите API ключ для работы")
     
     st.info("💡 Все сервисы бесплатные:\n- Google Gemini (Free Tier)\n- Pollinations.ai")
     
