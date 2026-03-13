@@ -204,31 +204,45 @@ if generate_btn and uploaded_file and description:
             encoded_prompt = requests.utils.quote(image_prompt)
             image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=768&nologo=true"
             
-            # Проверяем доступность изображения
-            image_available = False
-            try:
-                head_response = requests.head(image_url, timeout=5)
-                if head_response.status_code == 200:
-                    # Пробуем получить изображение
-                    img_response = requests.get(image_url, timeout=15)
-                    if img_response.status_code == 200 and len(img_response.content) > 1000:
-                        # Проверяем что это действительно изображение (не JSON ошибка)
-                        if not img_response.content.startswith(b'{'):
-                            image_available = True
-                            # Сохраняем изображение в session state
-                            st.session_state.generated_image_data = img_response.content
-            except Exception:
-                pass
+            st.session_state.generated_image_url = None
+            st.session_state.generated_image_error = None
+            st.session_state.generated_image_data = None
             
-            if image_available:
-                st.session_state.generated_image_url = image_url
-                st.session_state.generated_image_error = None
-            else:
-                # Если Pollinations недоступен, показываем сообщение
-                st.session_state.generated_image_url = None
+            # Пробуем загрузить изображение с несколькими попытками
+            max_attempts = 3
+            for attempt in range(max_attempts):
+                try:
+                    with st.spinner(f"🎨 Генерация изображения (попытка {attempt + 1}/{max_attempts})..."):
+                        # Ждём немного перед первой попыткой
+                        if attempt > 0:
+                            import time
+                            time.sleep(2)
+                        
+                        # Получаем изображение напрямую
+                        img_response = requests.get(image_url, timeout=30)
+                        
+                        if img_response.status_code == 200 and len(img_response.content) > 1000:
+                            # Проверяем что это действительно изображение (не JSON ошибка)
+                            if not img_response.content.startswith(b'{') and not img_response.content.startswith(b'['):
+                                # Дополнительно проверяем Content-Type если есть заголовки
+                                content_type = img_response.headers.get('Content-Type', '')
+                                if 'image' in content_type or len(img_response.content) > 5000:
+                                    st.session_state.generated_image_data = img_response.content
+                                    st.session_state.generated_image_url = image_url
+                                    break
+                                    
+                except Exception as e:
+                    if attempt == max_attempts - 1:
+                        st.session_state.generated_image_error = (
+                            f"⚠️ Не удалось сгенерировать изображение после {max_attempts} попыток. "
+                            f"Попробуйте открыть ссылку вручную: {image_url}"
+                        )
+                    continue
+            
+            if not st.session_state.generated_image_data and not st.session_state.generated_image_error:
                 st.session_state.generated_image_error = (
-                    "⚠️ Сервис Pollinations.ai временно недоступен. "
-                    f"Вы можете сгенерировать изображение вручную по ссылке: {image_url}"
+                    f"⚠️ Сервис Pollinations.ai вернул неожиданный ответ. "
+                    f"Попробуйте открыть ссылку вручную: {image_url}"
                 )
             
             # Получаем код 1С
@@ -293,22 +307,21 @@ if st.session_state.analysis_result:
     with tab_image:
         st.markdown("### 🖼️ Сгенерированный макет формы")
         
-        if st.session_state.generated_image_url:
-            try:
-                st.image(st.session_state.generated_image_url, caption="Макет улучшенной формы 1С", use_container_width=True)
-                
-                # Кнопка для скачивания
-                st.download_button(
-                    label="📥 Скачать макет",
-                    data=requests.get(st.session_state.generated_image_url).content,
-                    file_name="form_layout_1c.png",
-                    mime="image/png"
-                )
-            except Exception as e:
-                st.error(f"Ошибка загрузки изображения: {e}")
-                st.info(f"URL изображения: {st.session_state.generated_image_url}")
+        if st.session_state.generated_image_data:
+            # Отображаем изображение из бинарных данных
+            st.image(st.session_state.generated_image_data, caption="Макет улучшенной формы 1С", use_container_width=True)
+            
+            # Кнопка для скачивания
+            st.download_button(
+                label="📥 Скачать макет",
+                data=st.session_state.generated_image_data,
+                file_name="form_layout_1c.png",
+                mime="image/png"
+            )
+        elif st.session_state.generated_image_error:
+            st.warning(st.session_state.generated_image_error)
         else:
-            st.warning("Изображение не сгенерировано")
+            st.info("⏳ Изображение генерируется...")
     
     with tab_code:
         st.markdown("### 💻 Код обработчиков событий 1С")
